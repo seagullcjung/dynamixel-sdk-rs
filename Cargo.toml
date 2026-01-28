@@ -2,6 +2,10 @@
 name = "dynamixel_sdk"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Dynamixel SDK written in rust"
+repository = "https://github.com/seagullcjung/dynamixel-sdk-rs"
+readme = "README.md"
 
 [dependencies]
 serialport = { version = "4.8.0", default-features = false }
