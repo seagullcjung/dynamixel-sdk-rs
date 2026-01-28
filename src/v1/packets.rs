@@ -1,4 +1,5 @@
 use super::error::{CommError, DeviceError};
+use std::cmp;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
@@ -250,9 +251,11 @@ impl StatusPacket {
     pub fn read_from<T: Read>(reader: &mut T, timeout: Duration) -> Result<Self, CommError> {
         let mut packet = Vec::new();
 
+        let mut packet_length = 11;
+
         let t0 = Instant::now();
         while t0.elapsed() <= timeout {
-            let mut tmp = vec![0; 1];
+            let mut tmp = vec![0; packet_length - packet.len()];
 
             let n = reader.read(&mut tmp)?;
             packet.extend(&tmp[..n]);
@@ -267,7 +270,11 @@ impl StatusPacket {
                 i += 1;
             }
 
-            if starts.len() > 0 {
+            if starts.len() == 0 {
+                if packet.len() >= HEADER.len() * 2 {
+                    packet.drain(..HEADER.len());
+                }
+            } else {
                 let last_start = starts[starts.len() - 1];
 
                 if last_start > 0 {
@@ -276,6 +283,8 @@ impl StatusPacket {
 
                 if packet.len() >= 4 {
                     let length = packet[3] as usize;
+
+                    packet_length = cmp::max(packet_length, 4 + length);
 
                     if packet.len() == 4 + length {
                         let checksum = packet[packet.len() - 1];

@@ -1,4 +1,5 @@
 use super::error::{CommError, DeviceError};
+use std::cmp;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
@@ -415,9 +416,11 @@ impl StatusPacket {
     ) -> Result<Self, CommError> {
         let mut packet = Vec::new();
 
+        let mut packet_length = 11;
+
         let t0 = Instant::now();
         while t0.elapsed() <= timeout {
-            let mut tmp = vec![0; 1];
+            let mut tmp = vec![0; packet_length - packet.len()];
 
             let n = reader.read(&mut tmp)?;
             packet.extend(&tmp[..n]);
@@ -432,7 +435,11 @@ impl StatusPacket {
                 i += 1;
             }
 
-            if starts.len() > 0 {
+            if starts.len() == 0 {
+                if packet.len() >= HEADER.len() * 2 {
+                    packet.drain(..HEADER.len());
+                }
+            } else {
                 let last_start = starts[starts.len() - 1];
 
                 if last_start > 0 {
@@ -441,6 +448,8 @@ impl StatusPacket {
 
                 if packet.len() >= 7 {
                     let length = u16::from_le_bytes(packet[5..7].try_into().unwrap()) as usize;
+
+                    packet_length = cmp::max(packet_length, 7 + length);
 
                     if packet.len() == 7 + length {
                         let crc =
