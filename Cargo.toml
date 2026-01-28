@@ -1,0 +1,12 @@
+[package]
+name = "dynamixel_sdk"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serialport = { version = "4.8.0", default-features = false }
+num-traits = "0.2.0"
+thiserror = "2"
+
+[dev-dependencies]
+rstest = "0.26.1"
