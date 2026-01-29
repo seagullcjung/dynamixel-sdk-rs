@@ -198,15 +198,15 @@ impl Bus {
         Ok(motors)
     }
 
-    pub fn read(&mut self, id: u8, address: u16, length: u16) -> Result<Vec<u8>> {
-        let packet = InstructionPacket::read(id, address, length);
+    pub fn read<const LEN: usize>(&mut self, id: u8, address: u16) -> Result<[u8; LEN]> {
+        let packet = InstructionPacket::read(id, address, LEN as u16);
 
         let timeout = self.port.timeout();
         packet.write_to(&mut self.port, timeout)?;
 
         let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
-        Ok(packet.params()?)
+        Ok(packet.params()?[..LEN].try_into()?)
     }
 
     pub fn write(&mut self, id: u8, address: u16, value: &[u8]) -> Result<()> {
