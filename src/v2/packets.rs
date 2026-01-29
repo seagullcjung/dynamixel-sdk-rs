@@ -85,7 +85,7 @@ impl InstructionPacket {
         bytes.push(self.id);
 
         let mut params = self.params.clone();
-        if self.params.len() > 0 {
+        if params.len() >= 3 {
             let mut indices: Vec<usize> = vec![];
             for i in 0..params.len() - 2 {
                 if params[i] == 0xFF && params[i + 1] == 0xFF && params[i + 2] == 0xFD {
@@ -545,18 +545,27 @@ mod tests {
     use rstest::rstest;
     use std::io::Cursor;
 
-    #[test]
-    fn as_bytes() {
+    #[rstest]
+    fn as_bytes(#[values(0, 1, 2, 3, 4)] n: usize) {
         let packet = InstructionPacket {
             id: 0x01,
             instruction: 0x02,
-            params: vec![0x84, 0x00, 0x04, 0x00],
+            params: vec![0x84, 0x00, 0x04, 0x00][..n].to_vec(),
         };
         let bytes = packet.as_bytes();
 
-        let expected_bytes = [
-            0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02, 0x84, 0x00, 0x04, 0x00, 0x1D, 0x15,
-        ];
+        let mut expected_bytes = vec![0xFF, 0xFF, 0xFD, 0x00, 0x01];
+
+        expected_bytes.extend((n as u16 + 3).to_le_bytes());
+
+        expected_bytes.push(0x02);
+
+        let params = vec![0x84, 0x00, 0x04, 0x00];
+        expected_bytes.extend(&params[..n]);
+
+        let crc = calc_crc(&expected_bytes);
+
+        expected_bytes.extend(crc.to_le_bytes());
 
         assert_eq!(bytes, expected_bytes.to_vec());
     }

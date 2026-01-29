@@ -234,8 +234,7 @@ impl Bus {
 
         let only_ping = self.return_level == ReturnLevel::PING;
         let upto_read = self.return_level == ReturnLevel::READ;
-        let is_broadcast = id == BROADCAST_ID;
-        if only_ping | upto_read | is_broadcast {
+        if only_ping | upto_read {
             return Ok(());
         }
 
@@ -270,8 +269,7 @@ impl Bus {
 
         let only_ping = self.return_level == ReturnLevel::PING;
         let upto_read = self.return_level == ReturnLevel::READ;
-        let is_broadcast = id == BROADCAST_ID;
-        if only_ping | upto_read | is_broadcast {
+        if only_ping | upto_read {
             return Ok(());
         }
 
@@ -288,8 +286,7 @@ impl Bus {
 
         let only_ping = self.return_level == ReturnLevel::PING;
         let upto_read = self.return_level == ReturnLevel::READ;
-        let is_broadcast = id == BROADCAST_ID;
-        if only_ping | upto_read | is_broadcast {
+        if only_ping | upto_read {
             return Ok(());
         }
 
@@ -306,8 +303,7 @@ impl Bus {
 
         let only_ping = self.return_level == ReturnLevel::PING;
         let upto_read = self.return_level == ReturnLevel::READ;
-        let is_broadcast = id == BROADCAST_ID;
-        if only_ping | upto_read | is_broadcast {
+        if only_ping | upto_read {
             return Ok(());
         }
 
@@ -324,8 +320,7 @@ impl Bus {
 
         let only_ping = self.return_level == ReturnLevel::PING;
         let upto_read = self.return_level == ReturnLevel::READ;
-        let is_broadcast = id == BROADCAST_ID;
-        if only_ping | upto_read | is_broadcast {
+        if only_ping | upto_read {
             return Ok(());
         }
 
@@ -342,8 +337,7 @@ impl Bus {
 
         let only_ping = self.return_level == ReturnLevel::PING;
         let upto_read = self.return_level == ReturnLevel::READ;
-        let is_broadcast = id == BROADCAST_ID;
-        if only_ping | upto_read | is_broadcast {
+        if only_ping | upto_read {
             return Ok(());
         }
 
