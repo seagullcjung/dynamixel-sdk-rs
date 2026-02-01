@@ -2,6 +2,16 @@ use std::io;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+pub enum PacketError {
+    #[error("serial communication error")]
+    Serial(#[from] serialport::Error),
+    #[error("io error")]
+    IO(#[from] io::Error),
+    #[error("status packet is corrupted")]
+    Checksum,
+}
+
+#[derive(Error, Debug)]
 pub enum DeviceError {
     #[error("applied voltage out of range on id={0}")]
     InputVoltage(u8),
@@ -23,10 +33,18 @@ pub enum DeviceError {
     Unkown(u8),
 }
 
-#[derive(Error, Debug)]
-pub enum CommError {
-    #[error("connection error")]
-    IO(#[from] io::Error),
-    #[error("status packet is corrupted")]
-    Checksum,
+#[derive(thiserror::Error, Debug)]
+pub enum DynamixelError {
+    #[error("device side error")]
+    Device(#[from] DeviceError),
+    #[error("params should be empty")]
+    NotEmpty,
+    #[error("param length is incorrect")]
+    ParamLength,
+    #[error("packet error")]
+    Packet(#[from] PacketError),
+    #[error("serial communication error")]
+    Serial(#[from] serialport::Error),
+    #[error("io error")]
+    Io(#[from] io::Error),
 }

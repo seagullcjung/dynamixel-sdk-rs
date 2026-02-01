@@ -1,4 +1,4 @@
-use super::error::{CommError, DeviceError};
+use super::error::{DeviceError, PacketError};
 use std::cmp;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
@@ -218,6 +218,10 @@ impl StatusPacket {
 
     pub fn params(&self) -> Result<Vec<u8>, Vec<DeviceError>> {
         let mut error = self.error & 0x7F;
+
+        if error == 0 {
+            return Ok(self.params.clone());
+        }
         let mut mask = 0x01;
 
         let mut errors = Vec::new();
@@ -241,14 +245,10 @@ impl StatusPacket {
             errors.push(e);
         }
 
-        if errors.len() == 0 {
-            Ok(self.params.clone())
-        } else {
-            Err(errors)
-        }
+        Err(errors)
     }
 
-    pub fn read_from<T: Read>(reader: &mut T, timeout: Duration) -> Result<Self, CommError> {
+    pub fn read_from<T: Read>(reader: &mut T, timeout: Duration) -> Result<Self, PacketError> {
         let mut packet = Vec::new();
 
         let mut packet_length = 11;
@@ -290,7 +290,7 @@ impl StatusPacket {
                         let checksum = packet[packet.len() - 1];
 
                         if calc_checksum(&packet[2..packet.len() - 1]) != checksum {
-                            return Err(CommError::Checksum);
+                            return Err(PacketError::Checksum);
                         }
 
                         let id = packet[2];
@@ -304,7 +304,7 @@ impl StatusPacket {
             }
         }
 
-        Err(CommError::IO(io::Error::new(
+        Err(PacketError::from(io::Error::new(
             io::ErrorKind::TimedOut,
             "packet read timed out",
         )))
