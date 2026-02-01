@@ -1,5 +1,6 @@
 use super::error::{DeviceError, PacketError};
 use std::cmp;
+use std::collections::HashSet;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
@@ -216,7 +217,7 @@ impl StatusPacket {
         self.id
     }
 
-    pub fn params(&self) -> Result<Vec<u8>, Vec<DeviceError>> {
+    pub fn params(&self) -> Result<Vec<u8>, HashSet<DeviceError>> {
         let mut error = self.error & 0x7F;
 
         if error == 0 {
@@ -224,7 +225,7 @@ impl StatusPacket {
         }
         let mut mask = 0x01;
 
-        let mut errors = Vec::new();
+        let mut errors = HashSet::new();
 
         for _ in 0..6 {
             error = error & mask;
@@ -242,7 +243,7 @@ impl StatusPacket {
 
             mask <<= 1;
 
-            errors.push(e);
+            errors.insert(e);
         }
 
         Err(errors)

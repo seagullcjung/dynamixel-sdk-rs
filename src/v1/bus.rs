@@ -150,4 +150,179 @@ impl Bus {
 
         Ok(motors)
     }
+
+    pub fn read(&mut self, id: u8, address: u8, length: u8) -> Result<Vec<u8>, DynamixelError> {
+        let packet = InstructionPacket::read(id, address, length);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+        let params = packet.params()?;
+
+        if params.len() != length as usize {
+            return Err(DynamixelError::ParamLength);
+        }
+        Ok(params)
+    }
+
+    pub fn write(&mut self, id: u8, address: u8, value: &[u8]) -> Result<(), DynamixelError> {
+        let packet = InstructionPacket::write(id, address, value);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let only_ping = self.return_level == ReturnLevel::PING;
+        let upto_read = self.return_level == ReturnLevel::READ;
+        if only_ping | upto_read {
+            return Ok(());
+        }
+
+        let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
+
+        Ok(())
+    }
+
+    pub fn reg_write(&mut self, id: u8, address: u8, value: &[u8]) -> Result<(), DynamixelError> {
+        let packet = InstructionPacket::reg_write(id, address, value);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let only_ping = self.return_level == ReturnLevel::PING;
+        let upto_read = self.return_level == ReturnLevel::READ;
+        if only_ping | upto_read {
+            return Ok(());
+        }
+
+        let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
+
+        Ok(())
+    }
+
+    pub fn action(&mut self, id: u8) -> Result<(), DynamixelError> {
+        let packet = InstructionPacket::action(id);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let only_ping = self.return_level == ReturnLevel::PING;
+        let upto_read = self.return_level == ReturnLevel::READ;
+        let is_broadcast = id == BROADCAST_ID;
+        if only_ping | upto_read | is_broadcast {
+            return Ok(());
+        }
+
+        let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
+
+        Ok(())
+    }
+
+    pub fn factory_reset(&mut self, id: u8) -> Result<(), DynamixelError> {
+        let packet = InstructionPacket::factory_reset(id);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let only_ping = self.return_level == ReturnLevel::PING;
+        let upto_read = self.return_level == ReturnLevel::READ;
+        if only_ping | upto_read {
+            return Ok(());
+        }
+
+        let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
+
+        Ok(())
+    }
+
+    pub fn reboot(&mut self, id: u8) -> Result<(), DynamixelError> {
+        let packet = InstructionPacket::reboot(id);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let only_ping = self.return_level == ReturnLevel::PING;
+        let upto_read = self.return_level == ReturnLevel::READ;
+        if only_ping | upto_read {
+            return Ok(());
+        }
+
+        Ok(())
+    }
+
+    pub fn sync_write<const NUM: usize, const LEN: usize>(
+        &mut self,
+        ids: &[u8; NUM],
+        address: u8,
+        values: &[[u8; LEN]; NUM],
+    ) -> Result<(), DynamixelError> {
+        let packet = InstructionPacket::sync_write(ids, address, values);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let only_ping = self.return_level == ReturnLevel::PING;
+        let upto_read = self.return_level == ReturnLevel::READ;
+        if only_ping | upto_read {
+            return Ok(());
+        }
+
+        let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
+
+        Ok(())
+    }
+
+    pub fn bulk_read<const NUM: usize>(
+        &mut self,
+        ids: &[u8; NUM],
+        addresses: &[u8; NUM],
+        lengths: &[u8; NUM],
+    ) -> Result<HashMap<u8, Vec<u8>>, DynamixelError> {
+        let packet = InstructionPacket::bulk_read(ids, addresses, lengths);
+
+        let timeout = self.port.timeout();
+        packet.write_to(&mut self.port, timeout)?;
+
+        let mut id_to_length = HashMap::new();
+        for i in 0..NUM {
+            id_to_length.insert(ids[i], lengths[i]);
+        }
+
+        let mut map = HashMap::new();
+        for _ in 0..NUM {
+            let packet = StatusPacket::read_from(&mut self.port, timeout)?;
+
+            let length = id_to_length[&packet.id()];
+            let params = packet.params()?;
+
+            if params.len() != length as usize {
+                return Err(DynamixelError::ParamLength);
+            }
+
+            map.insert(packet.id(), packet.params()?);
+        }
+
+        Ok(map)
+    }
 }

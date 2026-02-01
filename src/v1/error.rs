@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use thiserror::Error;
 
@@ -11,7 +12,7 @@ pub enum PacketError {
     Checksum,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq, Hash)]
 pub enum DeviceError {
     #[error("applied voltage out of range on id={0}")]
     InputVoltage(u8),
@@ -36,7 +37,7 @@ pub enum DeviceError {
 #[derive(thiserror::Error, Debug)]
 pub enum DynamixelError {
     #[error("device side error")]
-    Device(#[from] DeviceError),
+    Device(HashSet<DeviceError>),
     #[error("params should be empty")]
     NotEmpty,
     #[error("param length is incorrect")]
@@ -47,4 +48,10 @@ pub enum DynamixelError {
     Serial(#[from] serialport::Error),
     #[error("io error")]
     Io(#[from] io::Error),
+}
+
+impl From<HashSet<DeviceError>> for DynamixelError {
+    fn from(errors: HashSet<DeviceError>) -> DynamixelError {
+        DynamixelError::Device(errors)
+    }
 }
