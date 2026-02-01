@@ -50,7 +50,7 @@ impl BusBuilder {
         self
     }
 
-    pub fn connect(self) -> Result<Bus, io::Error> {
+    pub fn connect(self) -> Result<Bus, serialport::Error> {
         Bus::connect(&self)
     }
 }
@@ -70,7 +70,7 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn connect(builder: &BusBuilder) -> Result<Self, io::Error> {
+    pub fn connect(builder: &BusBuilder) -> Result<Self, serialport::Error> {
         let port = serialport::new(&builder.path, builder.baud_rate)
             .timeout(builder.timeout)
             .open()?;
@@ -92,7 +92,7 @@ impl Bus {
         self.port.timeout()
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), io::Error> {
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), serialport::Error> {
         self.port.set_timeout(timeout)?;
 
         Ok(())
@@ -104,7 +104,7 @@ impl Bus {
         Ok(baud_rate)
     }
 
-    pub fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), io::Error> {
+    pub fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), serialport::Error> {
         self.port.set_baud_rate(baud_rate)?;
 
         Ok(())
@@ -115,10 +115,7 @@ impl Bus {
 
         let timeout = self.port.timeout();
 
-        match packet.write_to(&mut self.port, timeout) {
-            Ok(_) => {}
-            Err(e) => return Err(DynamixelError::from(e)),
-        }
+        packet.write_to(&mut self.port, timeout)?;
 
         fn parse_ping(params: Vec<u8>) -> MotorInfo {
             let model_number = u16::from_le_bytes(params[..2].try_into().unwrap());
@@ -144,11 +141,7 @@ impl Bus {
         }
 
         loop {
-            let packet = match StatusPacket::read_from(&mut self.port, timeout, true) {
-                Ok(packet) => packet,
-                Err(PacketError::Io(e)) if e.kind() == io::ErrorKind::TimedOut => return Ok(map),
-                Err(e) => return Err(DynamixelError::from(e)),
-            };
+            let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
             let params = packet.params()?;
 
@@ -161,19 +154,10 @@ impl Bus {
     pub fn scan(&mut self, baud_rates: &[u32]) -> Result<Vec<Motor>, DynamixelError> {
         let mut motors = Vec::new();
 
-        let original_baud_rate = match self.port.baud_rate() {
-            Ok(rate) => rate,
-            Err(e) => return Err(DynamixelError::from(e)),
-        };
+        let original_baud_rate = self.port.baud_rate()?;
 
         for &baud_rate in baud_rates {
-            let _ = match self.set_baud_rate(baud_rate) {
-                Ok(_) => (),
-                Err(e) => {
-                    self.set_baud_rate(original_baud_rate)?;
-                    return Err(DynamixelError::from(e));
-                }
-            };
+            self.set_baud_rate(baud_rate)?;
 
             let map = match self.ping(BROADCAST_ID) {
                 Ok(map) => map,
