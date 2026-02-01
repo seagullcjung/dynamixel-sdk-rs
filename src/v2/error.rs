@@ -1,7 +1,18 @@
 use std::io;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
+pub enum PacketError {
+    #[error("status packet is corrupted")]
+    Checksum,
+    #[error("status packet insruction is not 0x55")]
+    Instruction,
+    #[error("serial communication error")]
+    Serial(#[from] serialport::Error),
+    #[error("io error")]
+    Io(#[from] io::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
 pub enum DeviceError {
     #[error("failed to process the packet on id={0}")]
     ResultFail(u8),
@@ -23,12 +34,16 @@ pub enum DeviceError {
     Unkown(u8),
 }
 
-#[derive(Error, Debug)]
-pub enum CommError {
-    #[error("connection error")]
-    IO(#[from] io::Error),
-    #[error("status packet is corrupted")]
-    Checksum,
-    #[error("instruction for status packet is not 0x55")]
-    Instruction,
+#[derive(thiserror::Error, Debug)]
+pub enum DynamixelError {
+    #[error("device side error")]
+    Device(#[from] DeviceError),
+    #[error("params should be empty")]
+    NotEmpty,
+    #[error("packet error")]
+    Packet(#[from] PacketError),
+    #[error("serial communication error")]
+    Serial(#[from] serialport::Error),
+    #[error("io error")]
+    Io(#[from] io::Error),
 }

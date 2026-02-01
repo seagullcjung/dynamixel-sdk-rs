@@ -1,4 +1,4 @@
-use super::error::{CommError, DeviceError};
+use super::error::{DeviceError, PacketError};
 use std::cmp;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
@@ -53,8 +53,8 @@ fn calc_crc(buf: &[u8]) -> u16 {
 
     for byte in buf {
         let crc_h: u8 = (crc >> 8) as u8;
-        let i: usize = (crc_h ^ byte) as usize;
-        crc = (crc << 8) ^ CRC_TABLE[i];
+        let i: u8 = crc_h ^ byte;
+        crc = (crc << 8) ^ CRC_TABLE[i as usize];
     }
 
     crc
@@ -157,7 +157,7 @@ impl InstructionPacket {
 
     pub fn write(id: u8, address: u16, value: &[u8]) -> Self {
         let instruction = WRITE;
-        let mut params: Vec<u8> = address.to_le_bytes().to_vec();
+        let mut params = address.to_le_bytes().to_vec();
         params.extend(value);
 
         InstructionPacket {
@@ -169,7 +169,7 @@ impl InstructionPacket {
 
     pub fn reg_write(id: u8, address: u16, value: &[u8]) -> Self {
         let instruction = REG_WRITE;
-        let mut params: Vec<u8> = address.to_le_bytes().to_vec();
+        let mut params = address.to_le_bytes().to_vec();
         params.extend(value);
 
         InstructionPacket {
@@ -181,7 +181,7 @@ impl InstructionPacket {
 
     pub fn action(id: u8) -> Self {
         let instruction = ACTION;
-        let params: Vec<u8> = vec![];
+        let params = vec![];
 
         InstructionPacket {
             id,
@@ -209,7 +209,7 @@ impl InstructionPacket {
 
     pub fn reboot(id: u8) -> Self {
         let instruction = REBOOT;
-        let params: Vec<u8> = vec![];
+        let params = vec![];
 
         InstructionPacket {
             id,
@@ -413,7 +413,7 @@ impl StatusPacket {
         reader: &mut dyn Read,
         timeout: Duration,
         stuffed: bool,
-    ) -> Result<Self, CommError> {
+    ) -> Result<Self, PacketError> {
         let mut packet = Vec::new();
 
         let mut packet_length = 11;
@@ -456,7 +456,7 @@ impl StatusPacket {
                             u16::from_le_bytes(packet[packet.len() - 2..].try_into().unwrap());
 
                         if calc_crc(&packet[..packet.len() - 2]) != crc {
-                            return Err(CommError::Checksum);
+                            return Err(PacketError::Checksum);
                         }
 
                         let id = packet[4];
@@ -491,7 +491,7 @@ impl StatusPacket {
                         }
 
                         if instruction != 0x55 {
-                            return Err(CommError::Instruction);
+                            return Err(PacketError::Instruction);
                         }
 
                         return Ok(StatusPacket { id, error, params });
@@ -500,7 +500,7 @@ impl StatusPacket {
             }
         }
 
-        Err(CommError::IO(io::Error::new(
+        Err(PacketError::from(io::Error::new(
             io::ErrorKind::TimedOut,
             "packet read timed out",
         )))

@@ -1,10 +1,8 @@
-use super::error::CommError;
+use super::error::{DynamixelError, PacketError};
 use super::packets::{BROADCAST_ID, Clear, InstructionPacket, Reset, StatusPacket};
 use std::collections::HashMap;
 use std::io;
 use std::time::Duration;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub struct MotorInfo {
     model_number: u16,
@@ -52,7 +50,7 @@ impl BusBuilder {
         self
     }
 
-    pub fn connect(self) -> Result<Bus> {
+    pub fn connect(self) -> Result<Bus, io::Error> {
         Bus::connect(&self)
     }
 }
@@ -72,7 +70,7 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn connect(builder: &BusBuilder) -> Result<Self> {
+    pub fn connect(builder: &BusBuilder) -> Result<Self, io::Error> {
         let port = serialport::new(&builder.path, builder.baud_rate)
             .timeout(builder.timeout)
             .open()?;
@@ -94,30 +92,33 @@ impl Bus {
         self.port.timeout()
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<()> {
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), io::Error> {
         self.port.set_timeout(timeout)?;
 
         Ok(())
     }
 
-    pub fn baud_rate(&self) -> Result<u32> {
+    pub fn baud_rate(&self) -> Result<u32, io::Error> {
         let baud_rate = self.port.baud_rate()?;
 
         Ok(baud_rate)
     }
 
-    pub fn set_baud_rate(&mut self, baud_rate: u32) -> Result<()> {
+    pub fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), io::Error> {
         self.port.set_baud_rate(baud_rate)?;
 
         Ok(())
     }
 
-    pub fn ping(&mut self, id: u8) -> Result<HashMap<u8, MotorInfo>> {
+    pub fn ping(&mut self, id: u8) -> Result<HashMap<u8, MotorInfo>, DynamixelError> {
         let packet = InstructionPacket::ping(id);
 
         let timeout = self.port.timeout();
 
-        packet.write_to(&mut self.port, timeout)?;
+        match packet.write_to(&mut self.port, timeout) {
+            Ok(_) => {}
+            Err(e) => return Err(DynamixelError::from(e)),
+        }
 
         fn parse_ping(params: Vec<u8>) -> MotorInfo {
             let model_number = u16::from_le_bytes(params[..2].try_into().unwrap());
@@ -145,8 +146,8 @@ impl Bus {
         loop {
             let packet = match StatusPacket::read_from(&mut self.port, timeout, true) {
                 Ok(packet) => packet,
-                Err(CommError::IO(e)) if e.kind() == io::ErrorKind::TimedOut => return Ok(map),
-                Err(e) => return Err(Box::new(e)),
+                Err(PacketError::Io(e)) if e.kind() == io::ErrorKind::TimedOut => return Ok(map),
+                Err(e) => return Err(DynamixelError::from(e)),
             };
 
             let params = packet.params()?;
@@ -157,17 +158,20 @@ impl Bus {
         }
     }
 
-    pub fn scan(&mut self, baud_rates: &[u32]) -> Result<Vec<Motor>> {
+    pub fn scan(&mut self, baud_rates: &[u32]) -> Result<Vec<Motor>, DynamixelError> {
         let mut motors = Vec::new();
 
-        let original_baud_rate = self.port.baud_rate()?;
+        let original_baud_rate = match self.port.baud_rate() {
+            Ok(rate) => rate,
+            Err(e) => return Err(DynamixelError::from(e)),
+        };
 
         for &baud_rate in baud_rates {
-            let _ = match self.port.set_baud_rate(baud_rate) {
+            let _ = match self.set_baud_rate(baud_rate) {
                 Ok(_) => (),
                 Err(e) => {
-                    self.port.set_baud_rate(original_baud_rate)?;
-                    return Err(Box::new(e));
+                    self.set_baud_rate(original_baud_rate)?;
+                    return Err(DynamixelError::from(e));
                 }
             };
 
@@ -198,18 +202,18 @@ impl Bus {
         Ok(motors)
     }
 
-    pub fn read<const LEN: usize>(&mut self, id: u8, address: u16) -> Result<[u8; LEN]> {
-        let packet = InstructionPacket::read(id, address, LEN as u16);
+    pub fn read(&mut self, id: u8, address: u16, length: u16) -> Result<Vec<u8>, DynamixelError> {
+        let packet = InstructionPacket::read(id, address, length);
 
         let timeout = self.port.timeout();
         packet.write_to(&mut self.port, timeout)?;
 
         let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
-        Ok(packet.params()?[..LEN].try_into()?)
+        Ok(packet.params()?)
     }
 
-    pub fn write(&mut self, id: u8, address: u16, value: &[u8]) -> Result<()> {
+    pub fn write(&mut self, id: u8, address: u16, value: &[u8]) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::write(id, address, value);
 
         let timeout = self.port.timeout();
@@ -221,12 +225,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn reg_write(&mut self, id: u8, address: u16, value: &[u8]) -> Result<()> {
+    pub fn reg_write(&mut self, id: u8, address: u16, value: &[u8]) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::reg_write(id, address, value);
 
         let timeout = self.port.timeout();
@@ -238,12 +246,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn action(&mut self, id: u8) -> Result<()> {
+    pub fn action(&mut self, id: u8) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::action(id);
 
         let timeout = self.port.timeout();
@@ -256,12 +268,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn factory_reset(&mut self, id: u8, option: Reset) -> Result<()> {
+    pub fn factory_reset(&mut self, id: u8, option: Reset) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::factory_reset(id, option);
 
         let timeout = self.port.timeout();
@@ -273,12 +289,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn reboot(&mut self, id: u8) -> Result<()> {
+    pub fn reboot(&mut self, id: u8) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::reboot(id);
 
         let timeout = self.port.timeout();
@@ -290,12 +310,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn clear(&mut self, id: u8, option: Clear) -> Result<()> {
+    pub fn clear(&mut self, id: u8, option: Clear) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::clear(id, option);
 
         let timeout = self.port.timeout();
@@ -307,12 +331,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn control_table_backup(&mut self, id: u8) -> Result<()> {
+    pub fn control_table_backup(&mut self, id: u8) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::control_table_backup(id);
 
         let timeout = self.port.timeout();
@@ -324,12 +352,16 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn control_table_restore(&mut self, id: u8) -> Result<()> {
+    pub fn control_table_restore(&mut self, id: u8) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::control_table_restore(id);
 
         let timeout = self.port.timeout();
@@ -341,26 +373,31 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn sync_read<const LEN: usize>(
+    pub fn sync_read(
         &mut self,
         ids: &[u8],
         address: u16,
-    ) -> Result<HashMap<u8, [u8; LEN]>> {
-        let packet = InstructionPacket::sync_read(ids, address, LEN as u16);
+        length: u16,
+    ) -> Result<HashMap<u8, Vec<u8>>, DynamixelError> {
+        let packet = InstructionPacket::sync_read(ids, address, length);
 
         let timeout = self.port.timeout();
         packet.write_to(&mut self.port, timeout)?;
 
         let mut map = HashMap::new();
-        for _ in 0..LEN {
+        for _ in 0..length {
             let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
-            map.insert(packet.id(), packet.params()?[..LEN].try_into()?);
+            map.insert(packet.id(), packet.params()?);
         }
 
         Ok(map)
@@ -371,7 +408,7 @@ impl Bus {
         ids: &[u8; NUM],
         address: u16,
         values: &[[u8; LEN]; NUM],
-    ) -> Result<()> {
+    ) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::sync_write(ids, address, values);
 
         let timeout = self.port.timeout();
@@ -383,28 +420,33 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
 
-    pub fn fast_sync_read<const LEN: usize>(
+    pub fn fast_sync_read(
         &mut self,
         ids: &[u8],
         address: u16,
-    ) -> Result<HashMap<u8, [u8; LEN]>> {
-        let packet = InstructionPacket::sync_read(ids, address, LEN as u16);
+        length: u16,
+    ) -> Result<HashMap<u8, Vec<u8>>, DynamixelError> {
+        let packet = InstructionPacket::sync_read(ids, address, length);
 
         let timeout = self.port.timeout();
         packet.write_to(&mut self.port, timeout)?;
 
         let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
 
-        let lengths = vec![LEN as u16; ids.len()];
+        let lengths = vec![length; ids.len()];
 
         let mut map = HashMap::new();
         for packet in packet.parse_subpackets(&lengths) {
-            map.insert(packet.id(), packet.params()?[..LEN].try_into()?);
+            map.insert(packet.id(), packet.params()?);
         }
 
         Ok(map)
@@ -415,7 +457,7 @@ impl Bus {
         ids: &[u8; NUM],
         addresses: &[u16; NUM],
         lengths: &[u16; NUM],
-    ) -> Result<HashMap<u8, Vec<u8>>> {
+    ) -> Result<HashMap<u8, Vec<u8>>, DynamixelError> {
         let packet = InstructionPacket::bulk_read(ids, addresses, lengths);
 
         let timeout = self.port.timeout();
@@ -436,7 +478,7 @@ impl Bus {
         ids: &[u8; NUM],
         addresses: &[u16; NUM],
         values: &[Vec<u8>; NUM],
-    ) -> Result<()> {
+    ) -> Result<(), DynamixelError> {
         let packet = InstructionPacket::bulk_write(ids, addresses, values);
 
         let timeout = self.port.timeout();
@@ -448,7 +490,11 @@ impl Bus {
             return Ok(());
         }
 
-        StatusPacket::read_from(&mut self.port, timeout, false)?;
+        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
+
+        if packet.params()?.len() > 0 {
+            return Err(DynamixelError::NotEmpty);
+        }
 
         Ok(())
     }
@@ -458,7 +504,7 @@ impl Bus {
         ids: &[u8; NUM],
         addresses: &[u16; NUM],
         lengths: &[u16; NUM],
-    ) -> Result<HashMap<u8, Vec<u8>>> {
+    ) -> Result<HashMap<u8, Vec<u8>>, DynamixelError> {
         let packet = InstructionPacket::bulk_read(ids, addresses, lengths);
 
         let timeout = self.port.timeout();
