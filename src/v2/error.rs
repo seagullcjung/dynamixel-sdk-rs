@@ -40,6 +40,8 @@ pub enum DynamixelError {
     Device(#[from] DeviceError),
     #[error("params should be empty")]
     NotEmpty,
+    #[error("param length is incorrect")]
+    ParamLength,
     #[error("packet error")]
     Packet(#[from] PacketError),
     #[error("serial communication error")]

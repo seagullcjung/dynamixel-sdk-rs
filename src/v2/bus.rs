@@ -210,7 +210,11 @@ impl Bus {
 
         let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
-        Ok(packet.params()?)
+        let params = packet.params()?;
+        if params.len() != length as usize {
+            return Err(DynamixelError::ParamLength);
+        }
+        Ok(params)
     }
 
     pub fn write(&mut self, id: u8, address: u16, value: &[u8]) -> Result<(), DynamixelError> {
@@ -397,7 +401,12 @@ impl Bus {
         for _ in 0..length {
             let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
-            map.insert(packet.id(), packet.params()?);
+            let params = packet.params()?;
+            if params.len() != length as usize {
+                return Err(DynamixelError::ParamLength);
+            }
+
+            map.insert(packet.id(), params);
         }
 
         Ok(map)
@@ -446,6 +455,11 @@ impl Bus {
 
         let mut map = HashMap::new();
         for packet in packet.parse_subpackets(&lengths) {
+            let params = packet.params()?;
+            if params.len() != length as usize {
+                return Err(DynamixelError::ParamLength);
+            }
+
             map.insert(packet.id(), packet.params()?);
         }
 
@@ -463,9 +477,21 @@ impl Bus {
         let timeout = self.port.timeout();
         packet.write_to(&mut self.port, timeout)?;
 
+        let mut id_to_length = HashMap::new();
+        for i in 0..NUM {
+            id_to_length.insert(ids[i], lengths[i]);
+        }
+
         let mut map = HashMap::new();
-        for _ in 0..lengths.len() {
+        for _ in 0..NUM {
             let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
+
+            let length = id_to_length[&packet.id()];
+            let params = packet.params()?;
+
+            if params.len() != length as usize {
+                return Err(DynamixelError::ParamLength);
+            }
 
             map.insert(packet.id(), packet.params()?);
         }
@@ -512,8 +538,23 @@ impl Bus {
 
         let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
 
+        let mut id_to_length = HashMap::new();
+        for i in 0..NUM {
+            id_to_length.insert(ids[i], lengths[i]);
+        }
+
         let mut map = HashMap::new();
-        for packet in packet.parse_subpackets(lengths) {
+        let packets = packet.parse_subpackets(lengths);
+        for i in 0..packets.len() {
+            let packet = &packets[i];
+
+            let length = id_to_length[&packet.id()];
+            let params = packet.params()?;
+
+            if params.len() != length as usize {
+                return Err(DynamixelError::ParamLength);
+            }
+
             map.insert(packet.id(), packet.params()?);
         }
 
