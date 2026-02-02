@@ -1,7 +1,6 @@
-use super::error::{DynamixelError, PacketError};
+use super::error::DynamixelError;
 use super::packets::{BROADCAST_ID, InstructionPacket, StatusPacket};
 use std::collections::HashMap;
-use std::io;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -103,6 +102,10 @@ impl Bus {
     }
 
     pub fn ping(&mut self, id: u8) -> Result<Vec<u8>, DynamixelError> {
+        if id > BROADCAST_ID {
+            return Err(DynamixelError::InvalidID);
+        }
+
         let packet = InstructionPacket::ping(id);
 
         let timeout = self.port.timeout();
@@ -168,6 +171,10 @@ impl Bus {
     }
 
     pub fn write(&mut self, id: u8, address: u8, value: &[u8]) -> Result<(), DynamixelError> {
+        if id >= BROADCAST_ID {
+            return Err(DynamixelError::InvalidID);
+        }
+
         let packet = InstructionPacket::write(id, address, value);
 
         let timeout = self.port.timeout();
@@ -189,6 +196,10 @@ impl Bus {
     }
 
     pub fn reg_write(&mut self, id: u8, address: u8, value: &[u8]) -> Result<(), DynamixelError> {
+        if id >= BROADCAST_ID {
+            return Err(DynamixelError::InvalidID);
+        }
+
         let packet = InstructionPacket::reg_write(id, address, value);
 
         let timeout = self.port.timeout();
@@ -210,6 +221,10 @@ impl Bus {
     }
 
     pub fn action(&mut self, id: u8) -> Result<(), DynamixelError> {
+        if id > BROADCAST_ID {
+            return Err(DynamixelError::InvalidID);
+        }
+
         let packet = InstructionPacket::action(id);
 
         let timeout = self.port.timeout();
@@ -232,6 +247,10 @@ impl Bus {
     }
 
     pub fn factory_reset(&mut self, id: u8) -> Result<(), DynamixelError> {
+        if id >= BROADCAST_ID {
+            return Err(DynamixelError::InvalidID);
+        }
+
         let packet = InstructionPacket::factory_reset(id);
 
         let timeout = self.port.timeout();
@@ -253,6 +272,10 @@ impl Bus {
     }
 
     pub fn reboot(&mut self, id: u8) -> Result<(), DynamixelError> {
+        if id >= BROADCAST_ID {
+            return Err(DynamixelError::InvalidID);
+        }
+
         let packet = InstructionPacket::reboot(id);
 
         let timeout = self.port.timeout();
@@ -273,6 +296,12 @@ impl Bus {
         address: u8,
         values: &[[u8; LEN]; NUM],
     ) -> Result<(), DynamixelError> {
+        for &id in ids {
+            if id >= BROADCAST_ID {
+                return Err(DynamixelError::InvalidID);
+            }
+        }
+
         let packet = InstructionPacket::sync_write(ids, address, values);
 
         let timeout = self.port.timeout();
@@ -299,6 +328,12 @@ impl Bus {
         addresses: &[u8; NUM],
         lengths: &[u8; NUM],
     ) -> Result<HashMap<u8, Vec<u8>>, DynamixelError> {
+        for &id in ids {
+            if id >= BROADCAST_ID {
+                return Err(DynamixelError::InvalidID);
+            }
+        }
+
         let packet = InstructionPacket::bulk_read(ids, addresses, lengths);
 
         let timeout = self.port.timeout();

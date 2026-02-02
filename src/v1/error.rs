@@ -36,6 +36,8 @@ pub enum DeviceError {
 
 #[derive(thiserror::Error, Debug)]
 pub enum DynamixelError {
+    #[error("invalid dxl_id for instruction")]
+    InvalidID,
     #[error("device side error")]
     Device(HashSet<DeviceError>),
     #[error("params should be empty")]
