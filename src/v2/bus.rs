@@ -133,7 +133,7 @@ impl Bus {
 
         let mut map = HashMap::new();
 
-        if id != BROADCAST_ID {
+        if id < BROADCAST_ID {
             let packet = StatusPacket::read_from(&mut self.port, timeout, true)?;
 
             let params = packet.params()?;

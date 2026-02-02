@@ -114,7 +114,7 @@ impl Bus {
 
         let mut ids = Vec::new();
 
-        if id != BROADCAST_ID {
+        if id < BROADCAST_ID {
             let packet = StatusPacket::read_from(&mut self.port, timeout)?;
 
             ids.push(packet.id());
