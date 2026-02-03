@@ -81,7 +81,7 @@ impl InstructionPacket {
         let instruction = PING;
         let params = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -92,7 +92,7 @@ impl InstructionPacket {
         let instruction = READ;
         let params = Vec::from([address, length]);
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -104,7 +104,7 @@ impl InstructionPacket {
         let mut params = Vec::from([address]);
         params.extend(value);
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -116,7 +116,7 @@ impl InstructionPacket {
         let mut params = Vec::from([address]);
         params.extend(value);
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -127,7 +127,7 @@ impl InstructionPacket {
         let instruction = ACTION;
         let params: Vec<u8> = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -140,7 +140,7 @@ impl InstructionPacket {
         let instruction = FACTORY_RESET;
         let params = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -151,7 +151,7 @@ impl InstructionPacket {
         let instruction = REBOOT;
         let params: Vec<u8> = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -175,7 +175,7 @@ impl InstructionPacket {
             params.extend(values[i]);
         }
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -197,7 +197,7 @@ impl InstructionPacket {
             params.push(addresses[i]);
         }
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -299,7 +299,7 @@ impl StatusPacket {
 
                         let params = (&packet[5..packet.len() - 1]).to_vec();
 
-                        return Ok(StatusPacket { id, error, params });
+                        return Ok(Self { id, error, params });
                     }
                 }
             }

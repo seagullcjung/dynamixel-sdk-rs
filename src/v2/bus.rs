@@ -9,6 +9,16 @@ pub struct MotorInfo {
     firmware_version: u8,
 }
 
+impl MotorInfo {
+    pub fn model_number(&self) -> u16 {
+        self.model_number
+    }
+
+    pub fn firmware_version(&self) -> u8 {
+        self.firmware_version
+    }
+}
+
 #[derive(Debug)]
 pub struct Motor {
     id: u8,
@@ -285,7 +295,7 @@ impl Bus {
         Ok(())
     }
 
-    pub fn factory_reset(&mut self, id: u8, option: Reset) -> Result<(), DynamixelError> {
+    pub fn factory_reset(&mut self, id: u8, option: &Reset) -> Result<(), DynamixelError> {
         if id >= BROADCAST_ID {
             return Err(DynamixelError::InvalidID);
         }
@@ -335,7 +345,7 @@ impl Bus {
         Ok(())
     }
 
-    pub fn clear(&mut self, id: u8, option: Clear) -> Result<(), DynamixelError> {
+    pub fn clear(&mut self, id: u8, option: &Clear) -> Result<(), DynamixelError> {
         if id >= BROADCAST_ID {
             return Err(DynamixelError::InvalidID);
         }

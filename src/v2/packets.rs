@@ -137,7 +137,7 @@ impl InstructionPacket {
         let instruction = PING;
         let params = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -148,7 +148,7 @@ impl InstructionPacket {
         let instruction = READ;
         let params = [address.to_le_bytes(), length.to_le_bytes()].concat();
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -160,7 +160,7 @@ impl InstructionPacket {
         let mut params = address.to_le_bytes().to_vec();
         params.extend(value);
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -172,7 +172,7 @@ impl InstructionPacket {
         let mut params = address.to_le_bytes().to_vec();
         params.extend(value);
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -183,14 +183,14 @@ impl InstructionPacket {
         let instruction = ACTION;
         let params = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
         }
     }
 
-    pub fn factory_reset(id: u8, option: Reset) -> Self {
+    pub fn factory_reset(id: u8, option: &Reset) -> Self {
         let instruction = FACTORY_RESET;
         let param = match option {
             Reset::All => 0xFF,
@@ -200,7 +200,7 @@ impl InstructionPacket {
 
         let params = vec![param];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -211,21 +211,21 @@ impl InstructionPacket {
         let instruction = REBOOT;
         let params = vec![];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
         }
     }
 
-    pub fn clear(id: u8, option: Clear) -> Self {
+    pub fn clear(id: u8, option: &Clear) -> Self {
         let instruction = CLEAR;
         let params = match option {
             Clear::Position => vec![0x01, 0x44, 0x58, 0x4C, 0x22],
             Clear::Error => vec![0x02, 0x45, 0x52, 0x43, 0x4C],
         };
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -236,7 +236,7 @@ impl InstructionPacket {
         let instruction = CONTROL_TABLE_BACKUP;
         let params = vec![0x01, 0x43, 0x54, 0x52, 0x4C];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -247,7 +247,7 @@ impl InstructionPacket {
         let instruction = CONTROL_TABLE_BACKUP;
         let params = vec![0x02, 0x43, 0x54, 0x52, 0x4C];
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -260,7 +260,7 @@ impl InstructionPacket {
 
         let params = [&address.to_le_bytes(), &length.to_le_bytes(), ids].concat();
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -284,7 +284,7 @@ impl InstructionPacket {
             params.extend(values[i]);
         }
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -297,7 +297,7 @@ impl InstructionPacket {
 
         let params = [&address.to_le_bytes(), &length.to_le_bytes(), ids].concat();
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -319,7 +319,7 @@ impl InstructionPacket {
             params.extend(lengths[i].to_le_bytes());
         }
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -342,7 +342,7 @@ impl InstructionPacket {
             params.extend(&values[i]);
         }
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -364,7 +364,7 @@ impl InstructionPacket {
             params.extend(lengths[i].to_le_bytes());
         }
 
-        InstructionPacket {
+        Self {
             id,
             instruction,
             params,
@@ -404,9 +404,9 @@ impl StatusPacket {
                 7 => return Err(DeviceError::Access(self.id)),
                 _ => return Err(DeviceError::Unkown(self.id)),
             }
-        } else {
-            return Ok(self.params.clone());
         }
+
+        Ok(self.params.clone())
     }
 
     pub fn read_from(
@@ -425,17 +425,14 @@ impl StatusPacket {
             let n = reader.read(&mut tmp)?;
             packet.extend(&tmp[..n]);
 
-            let mut i = 0;
             let mut starts = Vec::new();
-            for window in packet.windows(HEADER.len()) {
+            for (i, window) in packet.windows(HEADER.len()).enumerate() {
                 if window == HEADER {
                     starts.push(i);
                 }
-
-                i += 1;
             }
 
-            if starts.len() == 0 {
+            if starts.is_empty() {
                 if packet.len() >= HEADER.len() * 2 {
                     packet.drain(..HEADER.len());
                 }
@@ -447,13 +444,18 @@ impl StatusPacket {
                 }
 
                 if packet.len() >= 7 {
-                    let length = u16::from_le_bytes(packet[5..7].try_into().unwrap()) as usize;
+                    let low = u16::from(packet[5]);
+                    let hi = u16::from(packet[6]);
+
+                    let length = ((hi << 8) | low) as usize;
 
                     packet_length = cmp::max(packet_length, 7 + length);
 
                     if packet.len() == 7 + length {
-                        let crc =
-                            u16::from_le_bytes(packet[packet.len() - 2..].try_into().unwrap());
+                        let low = u16::from(packet[packet.len() - 2]);
+                        let hi = u16::from(packet[packet.len() - 1]);
+
+                        let crc = (hi << 8) | low;
 
                         if calc_crc(&packet[..packet.len() - 2]) != crc {
                             return Err(PacketError::Checksum);
@@ -469,18 +471,14 @@ impl StatusPacket {
 
                         let mut indices = Vec::new();
                         if stuffed && params.len() >= 4 {
-                            let mut j: usize = 0;
-
-                            for window in params.windows(4) {
+                            for (j, window) in params.windows(4).enumerate() {
                                 if window == [0xFF, 0xFF, 0xFD, 0xFD] {
                                     indices.push(j + 3);
                                 }
-
-                                j += 1;
                             }
                         }
 
-                        if indices.len() > 0 {
+                        if !indices.is_empty() {
                             indices.reverse();
 
                             for j in indices {
@@ -494,7 +492,7 @@ impl StatusPacket {
                             return Err(PacketError::Instruction);
                         }
 
-                        return Ok(StatusPacket { id, error, params });
+                        return Ok(Self { id, error, params });
                     }
                 }
             }
@@ -511,20 +509,21 @@ impl StatusPacket {
 
         let mut packets: Vec<StatusPacket> = vec![];
 
-        let sub_packet = StatusPacket {
+        let sub_packet = Self {
             id: self.params[0],
             error: self.error,
-            params: self.params[1..length + 1].to_vec(),
+            params: self.params[1..=length].to_vec(),
         };
 
         packets.push(sub_packet);
 
         let mut start = length + 1;
-        for i in 1..lengths.len() {
-            let length = lengths[i] as usize;
+        for &length in lengths.iter().skip(1) {
+            let length = length as usize;
+
             let sub_packet = self.params[start..start + length + 4].to_vec();
 
-            let sub_packet = StatusPacket {
+            let sub_packet = Self {
                 id: sub_packet[3],
                 error: sub_packet[2],
                 params: sub_packet[4..4 + length].to_vec(),

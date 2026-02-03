@@ -5,8 +5,8 @@ use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Motor {
-    id: u8,
-    baud_rate: u32,
+    pub id: u8,
+    pub baud_rate: u32,
 }
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ReturnLevel {
