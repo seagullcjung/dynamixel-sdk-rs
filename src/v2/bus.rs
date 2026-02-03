@@ -19,14 +19,6 @@ impl MotorInfo {
     }
 }
 
-#[derive(Debug)]
-pub struct Motor {
-    id: u8,
-    baud_rate: u32,
-    model_number: u16,
-    firmware_version: u8,
-}
-
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ReturnLevel {
     PING,
@@ -165,15 +157,18 @@ impl Bus {
         }
     }
 
-    pub fn scan(&mut self, baud_rates: &[u32]) -> Result<Vec<Motor>, DynamixelError> {
-        let mut motors = Vec::new();
-
+    pub fn scan(
+        &mut self,
+        baud_rates: &[u32],
+    ) -> Result<HashMap<u32, HashMap<u8, MotorInfo>>, DynamixelError> {
         let original_baud_rate = self.port.baud_rate()?;
+
+        let mut map = HashMap::new();
 
         for &baud_rate in baud_rates {
             self.set_baud_rate(baud_rate)?;
 
-            let map = match self.ping(BROADCAST_ID) {
+            let current_map = match self.ping(BROADCAST_ID) {
                 Ok(map) => map,
                 Err(e) => {
                     self.port.set_baud_rate(original_baud_rate)?;
@@ -181,23 +176,12 @@ impl Bus {
                 }
             };
 
-            if !map.is_empty() {
-                for (&id, info) in &map {
-                    let model_number = info.model_number;
-                    let firmware_version = info.firmware_version;
-                    motors.push(Motor {
-                        id,
-                        baud_rate,
-                        model_number,
-                        firmware_version,
-                    });
-                }
-            }
+            map.insert(baud_rate, current_map);
         }
 
         self.port.set_baud_rate(original_baud_rate)?;
 
-        Ok(motors)
+        Ok(map)
     }
 
     pub fn read(&mut self, id: u8, address: u16, length: u16) -> Result<Vec<u8>, DynamixelError> {

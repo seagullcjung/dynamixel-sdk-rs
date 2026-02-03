@@ -3,11 +3,6 @@ use super::packets::{BROADCAST_ID, InstructionPacket, StatusPacket};
 use std::collections::HashMap;
 use std::time::Duration;
 
-#[derive(Debug)]
-pub struct Motor {
-    pub id: u8,
-    pub baud_rate: u32,
-}
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ReturnLevel {
     PING,
@@ -128,10 +123,10 @@ impl Bus {
         }
     }
 
-    pub fn scan(&mut self, baud_rates: &[u32]) -> Result<Vec<Motor>, DynamixelError> {
-        let mut motors = Vec::new();
-
+    pub fn scan(&mut self, baud_rates: &[u32]) -> Result<HashMap<u32, Vec<u8>>, DynamixelError> {
         let original_baud_rate = self.port.baud_rate()?;
+
+        let mut map = HashMap::new();
 
         for &baud_rate in baud_rates {
             self.port.set_baud_rate(baud_rate)?;
@@ -144,14 +139,12 @@ impl Bus {
                 }
             };
 
-            for id in ids {
-                motors.push(Motor { id, baud_rate });
-            }
+            map.insert(baud_rate, ids);
         }
 
         self.port.set_baud_rate(original_baud_rate)?;
 
-        Ok(motors)
+        Ok(map)
     }
 
     pub fn read(&mut self, id: u8, address: u8, length: u8) -> Result<Vec<u8>, DynamixelError> {
