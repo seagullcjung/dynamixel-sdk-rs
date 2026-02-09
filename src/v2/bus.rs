@@ -453,18 +453,6 @@ impl Bus {
         let timeout = self.port.timeout();
         packet.write_to(&mut self.port, timeout)?;
 
-        let only_ping = self.return_level == ReturnLevel::PING;
-        let upto_read = self.return_level == ReturnLevel::READ;
-        if only_ping | upto_read {
-            return Ok(());
-        }
-
-        let packet = StatusPacket::read_from(&mut self.port, timeout, false)?;
-
-        if packet.params()?.len() > 0 {
-            return Err(DynamixelError::NotEmpty);
-        }
-
         Ok(())
     }
 
